@@ -2,6 +2,7 @@
 const inquirer = require("inquirer");
 const mysql = require("mysql");
 const util = require("util");
+var connectionQueries = require("./queries")
 
 // Connection is saved as a variable
 const connection = mysql.createConnection({
@@ -18,6 +19,9 @@ connection.connect(function(err) {
   console.log("Server listening on id " + connection.threadId);
   mainLoop();
 })
+
+// const connectAsync = util.promisify(connection.connect).bind(connection);
+const queryAsync = util.promisify(connection.query).bind(connection);
 
 // Main loop takes user input from loop 
 function mainLoop() {
@@ -46,38 +50,7 @@ function mainLoop() {
         break;
       default:
         connection.end();
-    }
-    // if (userChoice === "View all employees") {
-    //   viewAllEmployees();
-    // }
-    // switch(userChoice) {
-    //   case "View all Employees":
-    //     viewAllEmployees();
-    //   case "View employees by department":
-    //     viewEmployeesByDept();
-    // };
-    // if (userChoice === "View all employees") {
-    //   connect(viewAllEmployees);
-    // } else if (userChoice === "View employees by department") {
-    //   connect(viewEmployeesByDept);
-    // } else if (userChoice === "View employees by manager") {
-    //   connect(viewEmployeesByManager);
-    // } else if (userChoice === "Add an employee") {
-    //   connect(addEmployee);
-    // } else if (userChoice === "Remove an employee") {
-    //   connect(removeEmployee);
-    // } else if (userChoice === "Update employee role") {
-    //   updateEmployeeRole();
-    // } else if (userChoice === "Update employee manager") {
-    //   updateEmployeeManager();
-    // } else if (userChoice === "View all roles") {
-    //   viewAllRoles();
-    // } else if (userChoice === "View all departments") {
-    //   viewAllDepartments();
-    // } else if (userChoice === "Exit") {
-    //   connection.end();
-    //   return;
-    // };
+    };
   });
 };
 
@@ -128,15 +101,14 @@ function addDepartment() {
     });
 };
 
-// const connectAsync = util.promisify(connection.connect).bind(connection);
-const queryAsync = util.promisify(connection.query).bind(connection);
 
+// Generates department array for inquirer lists
 async function generateDepartmentArray() {
   const result = await queryAsync("SELECT name FROM departments");
   return result.map(dept => dept.name);
 };
 
-// Partially working, needs to update roles table
+// Adds a new role to role table
 async function addRole() {
   var depts = await generateDepartmentArray();
   console.log(depts)
@@ -161,14 +133,13 @@ async function addRole() {
     console.log(title + salary + department);
     connection.query(`SELECT id FROM departments WHERE departments.name="${department}"`, (err, res) => {
       if (err) throw err;
-      const deptId = res.id;
-    connection.query(`INSERT INTO roles (title, salary, department_id)
-    VALUES (${title}, ${salary}, ${deptId})`, (err, res) => {
+      const deptId = res[0].id;
+    connection.query(`INSERT INTO roles (title, salary, department_id) VALUES ("${title}", ${salary}, ${deptId})`, (err, res) => {
         if (err) throw err;
         console.log(`${res.affectedRows} department added.`);
         mainLoop();
-    })
-    })
+      });
+    });
   });
 };
 
