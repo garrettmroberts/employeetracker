@@ -2,7 +2,6 @@
 const inquirer = require("inquirer");
 const mysql = require("mysql");
 const util = require("util");
-var connectionQueries = require("./queries")
 
 // Connection is saved as a variable
 const connection = mysql.createConnection({
@@ -29,7 +28,7 @@ function mainLoop() {
     type: "list",
     name: "userChoice",
     message: "What would you like to do?",
-    choices: ["View all employees", "View departments", "View roles", "Add a department", "Add a role", "View employees by manager", "Add an employee", "Remove an employee", "Update employee role", "Update employee manager", "View all roles", "View all departments", "Exit"]
+    choices: ["View all employees", "View departments", "View roles", "Add a department", "Add a role", "Add an employee", "View employees by manager", "Add an employee", "Remove an employee", "Update employee role", "Update employee manager", "View all roles", "View all departments", "Exit"]
   }).then(({ userChoice }) => {
     console.log(userChoice)
     switch (userChoice) {
@@ -48,11 +47,32 @@ function mainLoop() {
       case "Add a role":
         addRole();
         break;
+      case "Add an employee":
+        collectAddEmployeeInfo();
+        break;
       default:
         connection.end();
     };
   });
 };
+
+// Generates department array for inquirer lists
+async function generateDepartmentArray() {
+  const result = await queryAsync("SELECT name FROM departments");
+  return result.map(dept => dept.name);
+};
+
+async function generateEmployeeArray() {
+  const result = await queryAsync("SELECT first_name, last_name FROM employees");
+  var resultArray = result.map(employee => `${employee.first_name} ${employee.last_name}`);
+  resultArray.push("(none)");
+  return resultArray;
+}
+
+async function generateRolesArray() {
+  const result = await queryAsync("SELECT title FROM roles");
+  return result.map(role => role.title)
+}
 
 // Shows employee list w/ full names and job title
 function viewAllEmployees() {
@@ -101,17 +121,9 @@ function addDepartment() {
     });
 };
 
-
-// Generates department array for inquirer lists
-async function generateDepartmentArray() {
-  const result = await queryAsync("SELECT name FROM departments");
-  return result.map(dept => dept.name);
-};
-
 // Adds a new role to role table
 async function addRole() {
   var depts = await generateDepartmentArray();
-  console.log(depts)
   await inquirer.prompt([
     {
       type: "input",
@@ -130,7 +142,6 @@ async function addRole() {
       choices: depts
     }
   ]).then(({ title, salary, department }) => {
-    console.log(title + salary + department);
     connection.query(`SELECT id FROM departments WHERE departments.name="${department}"`, (err, res) => {
       if (err) throw err;
       const deptId = res[0].id;
@@ -141,6 +152,63 @@ async function addRole() {
       });
     });
   });
+};
+
+// Needs a bit of work.  Scoping issues.
+async function collectAddEmployeeInfo() {
+  var roles = await generateRolesArray();
+  var managers = await generateEmployeeArray();
+  await inquirer.prompt([
+    {
+      type: "text",
+      message: "What is the employee's first name?",
+      name: "first_name"
+    },
+    {
+      type: "text",
+      message: "What is the employee's first name?",
+      name: "last_name"
+    },
+    {
+      type: "list",
+      choices: roles,
+      message: "What is the employee's role?",
+      name: "role"
+    },
+    {
+      type: "list",
+      choices: managers,
+      message: "Who is this employee's manager?",
+      name: "manager"
+    }
+  ]).then(({ first_name, last_name, role, manager }) => {
+    
+    queryAsync(`SELECT id FROM roles WHERE title="${role}"`, (err, res) => {
+      if (err) throw err;
+      role_id = res[0].id;
+    });
+    if (manager != "(none)") {
+      var managerFirstName = manager.split(" ")[0];
+      var managerLastName = manager.split(" ")[1];
+      queryAsync(`SELECT id FROM employees WHERE first_name="${managerFirstName}" && last_name="${managerLastName}"`, (err, res) => {
+        if (err) throw err;
+        manager_id = res[0].id;
+      });
+      addEmployeeWithManager(first_name, last_name, role_id, manager_id);
+    } else {
+      addEmployeeWithoutManager();
+    }
+  });
+};
+
+function addEmployeeWithManager(first_name, last_name, role_id, manager_id) {
+  queryAsync("INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (first_name, last_name, role_id, manager_id);");
+  console.log(`${connection.affectedRows} employee added.`);
+  mainLoop();
+};
+
+function addEmployeeWithoutManager() {
+  console.log("New w/o manager")
 };
 
 
