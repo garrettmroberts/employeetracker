@@ -15,7 +15,7 @@ const connection = mysql.createConnection({
 // Opens connection to DB
 connection.connect(function(err) {
   if (err) throw err;
-  console.log("Server lsitening on id " + connection.threadId);
+  console.log("Server listening on id " + connection.threadId);
   mainLoop();
 })
 
@@ -25,7 +25,7 @@ function mainLoop() {
     type: "list",
     name: "userChoice",
     message: "What would you like to do?",
-    choices: ["View all employees", "View departments", "View roles", "Add a department", "View employees by manager", "Add an employee", "Remove an employee", "Update employee role", "Update employee manager", "View all roles", "View all departments", "Exit"]
+    choices: ["View all employees", "View departments", "View roles", "Add a department", "Add a role", "View employees by manager", "Add an employee", "Remove an employee", "Update employee role", "Update employee manager", "View all roles", "View all departments", "Exit"]
   }).then(({ userChoice }) => {
     console.log(userChoice)
     switch (userChoice) {
@@ -40,6 +40,9 @@ function mainLoop() {
         break;
       case "Add a department":
         addDepartment();
+        break;
+      case "Add a role":
+        addRole();
         break;
       default:
         connection.end();
@@ -78,7 +81,6 @@ function mainLoop() {
   });
 };
 
-
 // Shows employee list w/ full names and job title
 function viewAllEmployees() {
   const query = `SELECT employees.first_name, employees.last_name, roles.title
@@ -107,6 +109,66 @@ function viewAllRoles() {
     if (err) throw err;
     console.table(res);
     mainLoop();
+  });
+};
+
+function addDepartment() {
+  inquirer.prompt(
+    {
+      type: "input",
+      name: "deptName",
+      message: "What is the name of this department?"
+    }).then(({ deptName }) => {
+      const sql = `INSERT INTO departments (name) VALUES ("${deptName}");`
+      connection.query(sql, (err, res) => {
+        if (err) throw err;
+        console.log(`${res.affectedRows} department added.`);
+        mainLoop();
+      });
+    });
+};
+
+// const connectAsync = util.promisify(connection.connect).bind(connection);
+const queryAsync = util.promisify(connection.query).bind(connection);
+
+async function generateDepartmentArray() {
+  const result = await queryAsync("SELECT name FROM departments");
+  return result.map(dept => dept.name);
+};
+
+// Partially working, needs to update roles table
+async function addRole() {
+  var depts = await generateDepartmentArray();
+  console.log(depts)
+  await inquirer.prompt([
+    {
+      type: "input",
+      message: "What is the title of this role?",
+      name: "title"
+    },
+    {
+      type: "number",
+      message: "What salary does this role need?",
+      name: "salary"
+    },
+    {
+      type: "list",
+      message: "At which department does this role operate?",
+      name: "department",
+      choices: depts
+    }
+  ]).then(({ title, salary, department }) => {
+    console.log(title + salary + department);
+    connection.query(`SELECT id FROM departments WHERE departments.name="${department}"`, (err, res) => {
+      if (err) throw err;
+      const deptId = res.id;
+    connection.query(`INSERT INTO roles (title, salary, department_id)
+    VALUES (${title}, ${salary}, ${deptId})`, (err, res) => {
+        if (err) throw err;
+        console.log(`${res.affectedRows} department added.`);
+        mainLoop();
+    })
+    })
   });
 };
 
