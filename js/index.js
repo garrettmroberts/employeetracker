@@ -1,27 +1,8 @@
 // Import dependencies
 const inquirer = require("inquirer");
-const mysql = require("mysql");
-const util = require("util");
+const q = require("./queries")
 
-// Connection is saved as a variable
-const connection = mysql.createConnection({
-  host: "localhost",
-  port: 3306,
-  user: "root",
-  password: "BlueBird36!",
-  database: "employeeTrackerDB"
-});
-
-// Opens connection to DB
-connection.connect(function(err) {
-  if (err) throw err;
-  console.log("Server listening on id " + connection.threadId);
-  mainLoop();
-})
-
-// const connectAsync = util.promisify(connection.connect).bind(connection);
-const queryAsync = util.promisify(connection.query).bind(connection);
-
+mainLoop();
 // Main loop takes user input from loop 
 function mainLoop() {
   inquirer.prompt({
@@ -55,32 +36,13 @@ function mainLoop() {
     };
   });
 };
-
-// Generates department array for inquirer lists
-async function generateDepartmentArray() {
-  const result = await queryAsync("SELECT name FROM departments");
-  return result.map(dept => dept.name);
-};
-
-async function generateEmployeeArray() {
-  const result = await queryAsync("SELECT first_name, last_name FROM employees");
-  var resultArray = result.map(employee => `${employee.first_name} ${employee.last_name}`);
-  resultArray.push("(none)");
-  return resultArray;
-}
-
-async function generateRolesArray() {
-  const result = await queryAsync("SELECT title FROM roles");
-  return result.map(role => role.title)
-}
-
 // Shows employee list w/ full names and job title
 function viewAllEmployees() {
   const query = `SELECT employees.first_name, employees.last_name, roles.title
   FROM employees
   INNER JOIN roles
   ON employees.role_id = roles.id`
-  connection.query(query, (err, res) => {
+  q.connection.query(query, (err, res) => {
     if (err) throw err;
     console.table(res);
     mainLoop();
@@ -89,7 +51,7 @@ function viewAllEmployees() {
 
 // Shows all Departments
 function viewAllDepartments() {
-  connection.query("SELECT * FROM departments", (err, res) => {
+  q.connection.query("SELECT * FROM departments", (err, res) => {
     if (err) throw err;
     console.table(res);
     mainLoop();
@@ -98,7 +60,7 @@ function viewAllDepartments() {
 
 // Displays all current roles
 function viewAllRoles() {
-  connection.query("SELECT * FROM roles", (err, res) => {
+  q.connection.query("SELECT * FROM roles", (err, res) => {
     if (err) throw err;
     console.table(res);
     mainLoop();
@@ -123,7 +85,7 @@ function addDepartment() {
 
 // Adds a new role to role table
 async function addRole() {
-  var depts = await generateDepartmentArray();
+  var depts = await q.generateDepartmentArray();
   await inquirer.prompt([
     {
       type: "input",
