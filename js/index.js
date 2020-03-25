@@ -1,6 +1,7 @@
 // Import dependencies
 const inquirer = require("inquirer");
-const q = require("./queries")
+const mysql = require("mysql");
+const util = require("util");
 
 mainLoop();
 // Main loop takes user input from loop 
@@ -36,13 +37,52 @@ function mainLoop() {
     };
   });
 };
+
+// Connection is saved as a variable
+const connection = mysql.createConnection({
+  host: "localhost",
+  port: 3306,
+  user: "root",
+  password: "BlueBird36!",
+  database: "employeeTrackerDB"
+});
+
+// Opens connection to DB
+connection.connect(function (err) {
+  if (err) throw err;
+  console.log("Server listening on id " + connection.threadId);
+});
+
+// const connectAsync = util.promisify(connection.connect).bind(connection);
+const queryAsync = util.promisify(connection.query).bind(connection);
+
+// Generates array of departments in database
+async function generateDepartmentArray() {
+  const result = await queryAsync("SELECT name FROM departments");
+  return result.map(dept => dept.name);
+};
+
+// Generates employee array from database + a (none)
+async function generateEmployeeArray() {
+  const result = await queryAsync("SELECT first_name, last_name FROM employees");
+  var resultArray = result.map(employee => `${employee.first_name} ${employee.last_name}`);
+  resultArray.push("(none)");
+  return resultArray;
+};
+
+// Generates all roles available in a database
+async function generateRolesArray() {
+  const result = await queryAsync("SELECT title FROM roles");
+  return result.map(role => role.title)
+};
+
 // Shows employee list w/ full names and job title
 function viewAllEmployees() {
   const query = `SELECT employees.first_name, employees.last_name, roles.title
   FROM employees
   INNER JOIN roles
   ON employees.role_id = roles.id`
-  q.connection.query(query, (err, res) => {
+  connection.query(query, (err, res) => {
     if (err) throw err;
     console.table(res);
     mainLoop();
@@ -51,7 +91,7 @@ function viewAllEmployees() {
 
 // Shows all Departments
 function viewAllDepartments() {
-  q.connection.query("SELECT * FROM departments", (err, res) => {
+  connection.query("SELECT * FROM departments", (err, res) => {
     if (err) throw err;
     console.table(res);
     mainLoop();
@@ -60,7 +100,7 @@ function viewAllDepartments() {
 
 // Displays all current roles
 function viewAllRoles() {
-  q.connection.query("SELECT * FROM roles", (err, res) => {
+  connection.query("SELECT * FROM roles", (err, res) => {
     if (err) throw err;
     console.table(res);
     mainLoop();
@@ -85,7 +125,7 @@ function addDepartment() {
 
 // Adds a new role to role table
 async function addRole() {
-  var depts = await q.generateDepartmentArray();
+  var depts = await generateDepartmentArray();
   await inquirer.prompt([
     {
       type: "input",
@@ -143,34 +183,54 @@ async function collectAddEmployeeInfo() {
       message: "Who is this employee's manager?",
       name: "manager"
     }
-  ]).then(({ first_name, last_name, role, manager }) => {
-    
-    queryAsync(`SELECT id FROM roles WHERE title="${role}"`, (err, res) => {
-      if (err) throw err;
-      role_id = res[0].id;
-    });
+  ]).then(async ({ first_name, last_name, role, manager }) => {
     if (manager != "(none)") {
-      var managerFirstName = manager.split(" ")[0];
-      var managerLastName = manager.split(" ")[1];
-      queryAsync(`SELECT id FROM employees WHERE first_name="${managerFirstName}" && last_name="${managerLastName}"`, (err, res) => {
+      connection.query("SELECT id FROM roles WHERE title = ?", [role], (err, res) => {
         if (err) throw err;
-        manager_id = res[0].id;
+        var role_id = res[0].id;
+        addEmployeeWithManager(first_name, last_name, role_id, manager);
       });
-      addEmployeeWithManager(first_name, last_name, role_id, manager_id);
     } else {
-      addEmployeeWithoutManager();
+      addEmployeeWithoutManager(first_name, last_name, role);
     }
+    // var role_id;
+    // var manager_id;
+    // queryAsync(`SELECT id FROM roles WHERE title="${role}"`, (err, res) => {
+    //   if (err) throw err;
+    //   role_id = res[0].id;
+    // });
+    // if (manager != "(none)") {
+    //   var managerFirstName = manager.split(" ")[0];
+    //   var managerLastName = manager.split(" ")[1];
+    //   queryAsync(`SELECT id FROM employees WHERE first_name="${managerFirstName}" && last_name="${managerLastName}"`, (err, res) => {
+    //     if (err) throw err;
+    //     manager_id = res[0].id;
+    //   });
+    //   addEmployeeWithManager(first_name, last_name, role_id, manager_id);
+    // } else {
+    //   addEmployeeWithoutManager();
+    // }
   });
 };
 
-function addEmployeeWithManager(first_name, last_name, role_id, manager_id) {
-  queryAsync("INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES (first_name, last_name, role_id, manager_id);");
-  console.log(`${connection.affectedRows} employee added.`);
-  mainLoop();
+function addEmployeeWithManager(first_name, last_name, role_id, manager) {
+  var managerFirstName = manager.split(" ")[0];
+  var managerLastName = manager.split(" ")[1];
+  connection.query("SELECT id FROM employees WHERE first_name=? AND last_name=?", [managerFirstName, managerLastName], (err, res) => {
+    if (err) throw err;
+    var manager_id = res[0].id;
+    queryAsync(`INSERT INTO employees (first_name, last_name, role_id, manager_id) VALUES ("${first_name}", "${last_name}", "${role_id}", "${manager_id}")`);
+    mainLoop();
+  })
 };
 
-function addEmployeeWithoutManager() {
-  console.log("New w/o manager")
+function addEmployeeWithoutManager(first_name, last_name, role) {
+  connection.query("SELECT id FROM roles WHERE title = ?", [role], (err, res) => {
+    if (err) throw err;
+    var role_id = res[0].id;
+    queryAsync(`INSERT INTO employees (first_name, last_name, role_id) VALUES ("${first_name}", "${last_name}", "${role_id}")`);
+    mainLoop();
+  });
 };
 
 
